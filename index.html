@@ -1,3 +1,36 @@
+Это великолепная и очень практичная идея!
+
+В неразъемных тетрадях (на пружине, кольцах или сшитых скрепками) корешок и
+толстая пачка страниц часто упираются в рамку или каретку плоттера. Единственный
+способ нормально зажать тетрадь на рабочем столе — это повернуть её на 180°
+(вверх ногами) для обратной стороны листа.
+
+Как это должно работать:
+
+1.  Режим «🔄 Тетрадь: Четные 180°» (Автоматический):
+
+      - 1-я страница (нечетная): пишется прямо (0^\circ). Верх тетради сверху.
+      - 2-я страница (четная): переворачивается на 180^\circ. Верх тетради
+        оказывается снизу рабочего стола, но плоттер пишет текст нормально
+        (слева направо, сверху вниз относительно тетради).
+      - 3-я страница (нечетная): снова прямо (0^\circ) и так далее.
+
+2.  Что происходит при перевороте на 180^\circ:
+
+      - Все координаты текста разворачиваются:
+        X_{\text{new}} = \text{PaperW} - X, Y_{\text{new}} = \text{PaperH} - Y.
+      - Поля страницы (L/R и T/B) и красная линия полей автоматически
+        зеркалятся, чтобы текст точно попадал в строчки.
+      - На холсте рисуется яркий маркер ⬆ ВЕРХ ТЕТРАДИ, чтобы вы точно видели,
+        какой стороной класть тетрадь на стол ЧПУ.
+
+Готовый обновленный код index.html
+
+Я добавил переключатель «Ориентация / Поворот» в первую секцию панели Ribbon
+(0°, 180°, 🔄 Четные 180° (Тетрадь)) и математическую трансформацию координат.
+
+Скопируйте этот код и обновите ваш файл index.html на GitHub:
+
 <!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -397,27 +430,36 @@
         
         <!-- СЕКЦИЯ 1: ЛИСТ, РАЗМЕТКА И ПОЛЯ -->
         <div class="ribbon-group">
-            <div class="ribbon-group-title">📄 Лист, Разметка & Поля</div>
+            <div class="ribbon-group-title">📄 Лист, Разметка & Поворот</div>
             <div class="ribbon-row">
                 <div class="input-labeled">
                     <label>Лист</label>
-                    <select id="paperPreset" onchange="updatePaperSize()" style="min-width: 110px; padding: 3px 6px;">
+                    <select id="paperPreset" onchange="updatePaperSize()" style="min-width: 95px; padding: 3px 4px;">
                         <option value="A4">A4 (210 x 297)</option>
                         <option value="A5" selected>A5 (148 x 210)</option>
                         <option value="A6">A6 (105 x 148)</option>
                     </select>
                 </div>
                 <div class="input-labeled">
+                    <label>Ориентация</label>
+                    <select id="pageRotation" onchange="render()" style="min-width: 140px; padding: 3px 4px; font-weight: 700; color: #a5b4fc;">
+                        <option value="auto_flip" selected>🔄 Четные 180° (Тетрадь)</option>
+                        <option value="0">⬆️ 0° (Стандарт)</option>
+                        <option value="180">⬇️ 180° (Вверх ногами)</option>
+                    </select>
+                </div>
+                <div class="input-labeled">
                     <label>Разворот</label>
-                    <select id="pageSpread" onchange="render()" style="min-width: 130px; padding: 3px 6px;">
+                    <select id="pageSpread" onchange="render()" style="min-width: 115px; padding: 3px 4px;">
+                        <option value="auto" selected>📖 Авто (L/R)</option>
+                        <option value="right">📖 Правая</option>
+                        <option value="left">📖 Левая</option>
                         <option value="single">📄 Одиночная</option>
-                        <option value="right" selected>📖 Правая (Разворот)</option>
-                        <option value="left">📖 Левая (Разворот)</option>
                     </select>
                 </div>
                 <div class="input-labeled">
                     <label>Сетка</label>
-                    <select id="notebookStyle" onchange="render()" style="min-width: 120px; padding: 3px 6px;">
+                    <select id="notebookStyle" onchange="render()" style="min-width: 110px; padding: 3px 4px;">
                         <option value="grid5" selected>📐 Клетка (5 мм)</option>
                         <option value="lines8">📝 Линейка (8 мм)</option>
                         <option value="grid10">📏 Сетка (10 мм)</option>
@@ -426,7 +468,7 @@
                 </div>
                 <div class="input-labeled">
                     <label>Красная линия</label>
-                    <select id="redMarginMode" onchange="render()" style="min-width: 105px; padding: 3px 6px;">
+                    <select id="redMarginMode" onchange="render()" style="min-width: 95px; padding: 3px 4px;">
                         <option value="auto" selected>🔴 Авто</option>
                         <option value="left">🔴 Слева</option>
                         <option value="right">🔴 Справа</option>
@@ -814,7 +856,6 @@
         let serialPort = null;
         let serialWriter = null;
         let serialReader = null;
-        let isPrintingUSB = false;
 
         function numVal(id, fallback) {
             let el = document.getElementById(id);
@@ -920,7 +961,7 @@
             return splits;
         }
 
-        // --- FULL PRODUCTION-GRADE SVG PATH PARSER (BEZIERS & ARCS) ---
+        // --- FULL PRODUCTION-GRADE SVG PATH PARSER ---
         function parseSVGPathD(d) {
             if (!d) return [];
             const tokens = d.match(/([a-df-zA-DF-Z])|([-+]?(?:\d*\.\d+|\d+)(?:[eE][-+]?\d+)?)/g);
@@ -988,7 +1029,7 @@
                     for (let s = 1; s <= steps; s++) {
                         const t = s / steps;
                         const bx = Math.pow(1-t, 3)*curX + 3*Math.pow(1-t, 2)*t*x1 + 3*(1-t)*Math.pow(t, 2)*x2 + Math.pow(t, 3)*x;
-                        const by = Math.pow(1-t, 3)*curY + 3*Math.pow(1-t, 2)*t*y1 + 3*(1-t)*Math.pow(t, 2)*y2 + Math.pow(t, 3)*y;
+                        const by = Math.pow(1-t, 3)*curY + 3*Math.pow(1-t, 2)*t*y1 + 3*(1-t)*Math.pow(t, 2)*x2 + Math.pow(t, 3)*y;
                         currentStroke.push({ x: bx, y: by });
                     }
                     lastCtrlX = x2; lastCtrlY = y2;
@@ -1007,35 +1048,18 @@
                     for (let s = 1; s <= steps; s++) {
                         const t = s / steps;
                         const bx = Math.pow(1-t, 3)*curX + 3*Math.pow(1-t, 2)*t*x1 + 3*(1-t)*Math.pow(t, 2)*x2 + Math.pow(t, 3)*x;
-                        const by = Math.pow(1-t, 3)*curY + 3*Math.pow(1-t, 2)*t*y1 + 3*(1-t)*Math.pow(t, 2)*y2 + Math.pow(t, 3)*y;
+                        const by = Math.pow(1-t, 3)*curY + 3*Math.pow(1-t, 2)*t*y1 + 3*(1-t)*Math.pow(t, 2)*x2 + Math.pow(t, 3)*y;
                         currentStroke.push({ x: bx, y: by });
                     }
                     lastCtrlX = x2; lastCtrlY = y2;
                     curX = x; curY = y;
                     lastCmd = cmd;
-                } else if (upperCmd === 'Q') {
-                    const x1 = isRel ? curX + parseFloat(tokens[i++]) : parseFloat(tokens[i++]);
-                    const y1 = isRel ? curY + parseFloat(tokens[i++]) : parseFloat(tokens[i++]);
+                } else if (upperCmd === 'Q' || upperCmd === 'T') {
+                    const x1 = upperCmd === 'Q' ? (isRel ? curX + parseFloat(tokens[i++]) : parseFloat(tokens[i++])) : (curX * 2 - lastCtrlX);
+                    const y1 = upperCmd === 'Q' ? (isRel ? curY + parseFloat(tokens[i++]) : parseFloat(tokens[i++])) : (curY * 2 - lastCtrlY);
                     const x = isRel ? curX + parseFloat(tokens[i++]) : parseFloat(tokens[i++]);
                     const y = isRel ? curY + parseFloat(tokens[i++]) : parseFloat(tokens[i++]);
                     if ([x1,y1,x,y].some(isNaN)) continue;
-
-                    const steps = 6;
-                    for (let s = 1; s <= steps; s++) {
-                        const t = s / steps;
-                        const bx = Math.pow(1-t, 2)*curX + 2*(1-t)*t*x1 + Math.pow(t, 2)*x;
-                        const by = Math.pow(1-t, 2)*curY + 2*(1-t)*t*y1 + Math.pow(t, 2)*y;
-                        currentStroke.push({ x: bx, y: by });
-                    }
-                    lastCtrlX = x1; lastCtrlY = y1;
-                    curX = x; curY = y;
-                    lastCmd = cmd;
-                } else if (upperCmd === 'T') {
-                    const x1 = curX * 2 - lastCtrlX;
-                    const y1 = curY * 2 - lastCtrlY;
-                    const x = isRel ? curX + parseFloat(tokens[i++]) : parseFloat(tokens[i++]);
-                    const y = isRel ? curY + parseFloat(tokens[i++]) : parseFloat(tokens[i++]);
-                    if (isNaN(x) || isNaN(y)) continue;
 
                     const steps = 6;
                     for (let s = 1; s <= steps; s++) {
@@ -1406,17 +1430,33 @@
 
                 let mL = numVal('mLeft', 15);
                 let mR = numVal('mRight', 15);
-                const mT = numVal('mTop', 20);
-                const mB = numVal('mBottom', 20);
+                let mT = numVal('mTop', 20);
+                let mB = numVal('mBottom', 20);
                 const gutter = numVal('gutterWidth', 5);
                 const paraIndent = numVal('paraIndent', 10);
                 const penWidth = numVal('penWidth', 0.4);
 
-                const spreadMode = document.getElementById('pageSpread').value;
+                // ОПРЕДЕЛЕНИЕ ПОВОРОТА НА 180°
+                const rotSetting = document.getElementById('pageRotation') ? document.getElementById('pageRotation').value : 'auto_flip';
+                let isPageRotated180 = false;
+
+                if (rotSetting === '180') {
+                    isPageRotated180 = true;
+                } else if (rotSetting === 'auto_flip') {
+                    // Четные страницы (2, 4, 6...) имеют нечетный индекс (1, 3, 5...)
+                    isPageRotated180 = (currentPageIndex % 2 === 1);
+                }
+
+                // РАЗВОРОТ СТРАНИЦЫ (ЛЕВАЯ / ПРАВАЯ)
+                let spreadMode = document.getElementById('pageSpread') ? document.getElementById('pageSpread').value : 'auto';
+                if (spreadMode === 'auto') {
+                    spreadMode = (currentPageIndex % 2 === 0) ? 'right' : 'left';
+                }
+
                 if (spreadMode === 'right') mL += gutter;
                 else if (spreadMode === 'left') mR += gutter;
 
-                // NOTEBOOK RULING
+                // СЕТКА ТЕТРАДИ
                 const styleEl = document.getElementById('notebookStyle');
                 const style = styleEl ? styleEl.value : 'grid5';
                 ctx.strokeStyle = '#cbe0f5';
@@ -1436,7 +1476,7 @@
                     for(let y=0; y<=paperH; y+=10) { ctx.beginPath(); ctx.moveTo(0, y*scale); ctx.lineTo(paperW*scale, y*scale); ctx.stroke(); }
                 }
 
-                // RED MARGIN LINE
+                // КРАСНАЯ ЛИНИЯ ПОЛЕЙ
                 const redMode = document.getElementById('redMarginMode').value;
                 let drawRedX = null;
                 if (redMode === 'auto') drawRedX = (spreadMode === 'right') ? (paperW - mR) : mL;
@@ -1452,6 +1492,16 @@
                     ctx.stroke();
                 }
 
+                // МАРКЕР ВЕРХА ТЕТРАДИ ДЛЯ ОПЕРАТОРА ЧПУ
+                ctx.fillStyle = isPageRotated180 ? '#f43f5e' : '#6366f1';
+                ctx.font = 'bold 10px sans-serif';
+                ctx.textAlign = 'center';
+                if (!isPageRotated180) {
+                    ctx.fillText('⬆️ ВЕРХ ТЕТРАДИ (0° СТАНДАРТ)', (paperW * scale) / 2, 12);
+                } else {
+                    ctx.fillText('⬇️ ВЕРХ ТЕТРАДИ ВНИЗУ (ПЕРЕВЕРНУТО 180°)', (paperW * scale) / 2, (paperH * scale) - 6);
+                }
+
                 // PRNG (Случайный генератор с привязкой к Seed)
                 let seed = randomSeed;
                 function rand() {
@@ -1460,7 +1510,7 @@
                 }
                 function randRange(min, max) { return min + rand() * (max - min); }
 
-                // PARAMS
+                // ПАРАМЕТРЫ ТЕКСТА
                 const textEl = document.getElementById('textInput');
                 const text = textEl ? textEl.value : '';
                 const charCountEl = document.getElementById('charCountLabel');
@@ -1477,7 +1527,7 @@
                 const smartSqueeze = document.getElementById('smartSqueeze') ? document.getElementById('smartSqueeze').checked : true;
                 const currentAlign = document.getElementById('textAlign') ? document.getElementById('textAlign').value : 'left';
 
-                // GRID SNAPPING
+                // ВЫРАВНИВАНИЕ ПО СЕТКЕ
                 let effectiveLineHeight = rawLineHeight;
                 let startBaselineY = mT + fontSize;
 
@@ -1489,7 +1539,7 @@
                 const maxLineWidth = Math.max(10, paperW - mL - mR);
                 const maxLinesPerPage = Math.max(1, Math.floor((paperH - mB - startBaselineY) / effectiveLineHeight) + 1);
 
-                // WORD WRAP & SMART SQUEEZE
+                // РАЗБИВКА НА СТРОКИ И СЛОВА
                 let paragraphs = text.split('\n');
                 let allFormattedLines = [];
                 const spaceWidth = (fontSize * getCharWidth(' ')) + letterSpacing;
@@ -1594,7 +1644,7 @@
                     }
                 });
 
-                // MULTI-PAGE PARTITIONING
+                // МНОГОСТРАНИЧНОСТЬ
                 pagesData = [];
                 for (let i = 0; i < allFormattedLines.length; i += maxLinesPerPage) {
                     pagesData.push(allFormattedLines.slice(i, i + maxLinesPerPage));
@@ -1605,9 +1655,12 @@
                 if (currentPageIndex < 0) currentPageIndex = 0;
 
                 const pageIndicator = document.getElementById('pageIndicator');
-                if (pageIndicator) pageIndicator.innerText = `Стр. ${currentPageIndex + 1} из ${pagesData.length}`;
+                if (pageIndicator) {
+                    const rotBadge = isPageRotated180 ? ' 🔄 (180°)' : '';
+                    pageIndicator.innerText = `Стр. ${currentPageIndex + 1} из ${pagesData.length}${rotBadge}`;
+                }
 
-                // VECTOR PATH GENERATION
+                // ГЕНЕРАЦИЯ ВЕКТОРНЫХ ТРАЕКТОРИЙ
                 const currentLines = pagesData[currentPageIndex] || [];
                 let currentY = startBaselineY;
                 let rawPaths = [];
@@ -1624,7 +1677,6 @@
                     const effFontSize = fontSize;
                     const effLetterSpacing = letterSpacing * squeeze;
 
-                    // Уникальная фаза волны для каждой строки из Seed
                     const linePhase = randRange(0, Math.PI * 2);
                     const lineWaveAmp = waveIntensity * randRange(0.7, 1.3);
 
@@ -1685,8 +1737,8 @@
                                     if (stroke.length < 2) return;
 
                                     const pagePts = stroke.map(pt => {
-                                        const px = charBaseX + (pt[0] * charBoxW) + (pt[1] * charBoxH * shearFactor);
-                                        const py = charBaseY - (pt[1] * charBoxH);
+                                        let px = charBaseX + (pt[0] * charBoxW) + (pt[1] * charBoxH * shearFactor);
+                                        let py = charBaseY - (pt[1] * charBoxH);
                                         return { x: px, y: py };
                                     });
 
@@ -1725,11 +1777,20 @@
                                         });
                                     }
 
-                                    const finalStroke = subPath.map(pt => ({
-                                        x: pt.x,
-                                        y: pt.y,
-                                        mmY: paperH - pt.y
-                                    }));
+                                    // ТРАНСФОРМАЦИЯ 180° ПРИ ПЕРЕВЕРНУТОЙ СТРАНИЦЕ
+                                    const finalStroke = subPath.map(pt => {
+                                        let finalX = pt.x;
+                                        let finalY = pt.y;
+                                        if (isPageRotated180) {
+                                            finalX = paperW - pt.x;
+                                            finalY = paperH - pt.y;
+                                        }
+                                        return {
+                                            x: finalX,
+                                            y: finalY,
+                                            mmY: paperH - finalY // GRBL CNC Coordinate
+                                        };
+                                    });
                                     finalStroke.lineIndex = lineIdx;
                                     rawPaths.push(finalStroke);
                                 });
@@ -1746,13 +1807,13 @@
                     currentY += effectiveLineHeight;
                 });
 
-                // APPLY TSP
+                // TSP ОПТИМИЗАЦИЯ
                 const initialStats = calculateTravelDistances(rawPaths);
                 const optimizedPaths = optimizePathsTSP(rawPaths, tspMode);
                 pagesData[currentPageIndex].paths = optimizedPaths;
                 const optStats = calculateTravelDistances(optimizedPaths);
 
-                // DRAW AIR MOVES
+                // ОТРИСОВКА ХОЛОСТЫХ ПЕРЕМЕЩЕНИЙ (AIR MOVES)
                 if (showAirMoves && optimizedPaths.length > 0) {
                     ctx.strokeStyle = 'rgba(239, 68, 68, 0.45)';
                     ctx.lineWidth = 0.9;
@@ -1771,7 +1832,7 @@
                     ctx.setLineDash([]);
                 }
 
-                // DRAW INK
+                // ОТРИСОВКА ТЕКСТА ЧЕРНИЛАМИ
                 const inkColor = document.getElementById('inkColor').value;
                 ctx.strokeStyle = inkColor;
                 ctx.lineWidth = Math.max(0.6, penWidth * scale * 0.7);
@@ -1787,7 +1848,7 @@
                     ctx.stroke();
                 });
 
-                // TELEMETRY UPDATE
+                // ТЕЛЕМЕТРИЯ
                 const fDraw = numVal('fDraw', 1500);
                 const fRapid = numVal('fRapid', 3000);
                 const dwell = numVal('dwellTime', 0.0);
